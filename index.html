@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Camera Test</title>
-
+  <title>اختبار الكاميرا</title>
   <style>
     body {
       margin: 0;
@@ -15,48 +14,88 @@
       justify-content: center;
       background: #111;
       color: white;
-      font-family: Arial;
+      font-family: Arial, sans-serif;
       gap: 15px;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    h2 {
+      margin-bottom: 10px;
     }
 
     video {
-      width: 90%;
+      width: 100%;
       max-width: 500px;
       border-radius: 15px;
       background: #000;
+      border: 2px solid #333;
+    }
+
+    .btn-container {
+      display: flex;
+      gap: 10px;
     }
 
     button {
-      padding: 14px 25px;
+      padding: 12px 20px;
       border: 0;
       border-radius: 10px;
-      font-size: 18px;
+      font-size: 16px;
       cursor: pointer;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+
+    .start-btn {
+      background-color: #28a745;
+      color: white;
+    }
+
+    .stop-btn {
+      background-color: #dc3545;
+      color: white;
+    }
+
+    button:active {
+      opacity: 0.8;
     }
   </style>
 </head>
-
 <body>
 
-  <h2>📷 تجربة الكاميرا</h2>
+  <h2>تشغيل الكاميرا 📷</h2>
 
   <video id="camera" autoplay playsinline></video>
 
-  <button onclick="startCamera()">تشغيل الكاميرا</button>
+  <div class="btn-container">
+    <button class="start-btn" onclick="startCamera()">تشغيل الكاميرا</button>
+    <button class="stop-btn" onclick="stopCamera()">إيقاف الكاميرا</button>
+  </div>
 
   <script>
+    let currentStream = null;
+
     async function startCamera() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+        // طلب إذن الكاميرا الخلفية إن وجدت، أو الأمامية
+        currentStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
           audio: false
         });
-
-        document.getElementById("camera").srcObject = stream;
-
+        
+        const videoElement = document.getElementById("camera");
+        videoElement.srcObject = currentStream;
       } catch (error) {
-        alert("لم يتم السماح باستخدام الكاميرا.");
-        console.log(error);
+        alert("لم يتم السماح باستخدام الكاميرا أو أنها غير متاحة.");
+        console.error(error);
+      }
+    }
+
+    function stopCamera() {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+        document.getElementById("camera").srcObject = null;
       }
     }
   </script>
