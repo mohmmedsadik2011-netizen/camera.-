@@ -2,281 +2,258 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>كاميرا احترافية</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>لعبة الديناصور - Chrome Dino</title>
   <style>
     * {
       box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
     }
     body {
       margin: 0;
-      min-height: 100vh;
+      padding: 0;
+      background-color: #f7f7f7;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      background: #121212;
-      color: white;
-      font-family: Arial, sans-serif;
-      padding: 15px;
-      gap: 12px;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Courier New', Courier, monospace;
+      overflow: hidden;
     }
-
-    h3 {
-      margin: 5px 0;
-    }
-
-    .video-container {
+    #gameContainer {
       position: relative;
       width: 100%;
-      max-width: 450px;
-      background: #000;
-      border-radius: 15px;
+      max-width: 600px;
+      height: 200px;
+      background-color: #fff;
+      border-bottom: 2px solid #535353;
       overflow: hidden;
-      border: 2px solid #333;
-    }
-
-    video {
-      width: 100%;
-      display: block;
-    }
-
-    .controls-panel {
-      width: 100%;
-      max-width: 450px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      background: #1e1e1e;
-      padding: 15px;
-      border-radius: 12px;
-    }
-
-    .zoom-container {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 14px;
-    }
-
-    .zoom-container input {
-      flex: 1;
-    }
-
-    .buttons-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    button {
-      padding: 12px;
-      border: 0;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
       border-radius: 8px;
-      font-size: 15px;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .instructions {
+      margin-top: 15px;
+      color: #535353;
+      font-size: 14px;
       font-weight: bold;
-      cursor: pointer;
-      color: white;
-      transition: 0.2s;
-    }
-
-    .btn-switch { background-color: #6c757d; }
-    .btn-photo { background-color: #28a745; }
-    .btn-rec-start { background-color: #dc3545; }
-    .btn-rec-stop { background-color: #ffc107; color: #000; }
-
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    /* قسم عرض المعاينة للصورة/الفيديو */
-    .preview-section {
-      width: 100%;
-      max-width: 450px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      align-items: center;
-    }
-
-    canvas { display: none; }
-
-    img, video.media-preview {
-      width: 100%;
-      border-radius: 10px;
-      border: 1px solid #444;
+      text-align: center;
     }
   </style>
 </head>
 <body>
 
-  <h3>تطبيق الكاميرا المتكامل 📷</h3>
-
-  <!-- شاشة الكاميرا المباشرة -->
-  <div class="video-container">
-    <video id="camera" autoplay playsinline></video>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="600" height="200"></canvas>
   </div>
 
-  <!-- لوحة التحكم -->
-  <div class="controls-panel">
-    <!-- شريط التحكم بالزوم -->
-    <div class="zoom-container">
-      <span>🔍 الزوم:</span>
-      <input type="range" id="zoomRange" min="1" max="1" step="0.1" value="1" disabled>
-      <span id="zoomVal">1x</span>
-    </div>
-
-    <!-- أزرار التحكم -->
-    <div class="buttons-grid">
-      <button class="btn-switch" onclick="switchCamera()">🔄 تبديل الكاميرا</button>
-      <button class="btn-photo" onclick="takePhoto()">📸 التقاط صورة</button>
-      <button id="recStartBtn" class="btn-rec-start" onclick="startRecording()">🔴 بدء التسجيل</button>
-      <button id="recStopBtn" class="btn-rec-stop" onclick="stopRecording()" disabled>⏹️ إيقاف وتسجيل</button>
-    </div>
+  <div class="instructions">
+    اضغط على الشاشة أو زر المسافة (Space) للقفز 🦖
   </div>
-
-  <!-- قسم المعاينة للتسجيلات والصور -->
-  <div class="preview-section" id="previewSection"></div>
-
-  <!-- عنصر مخفي لالتقاط الصور -->
-  <canvas id="canvas"></canvas>
 
   <script>
-    let currentStream = null;
-    let facingMode = "environment"; // البدء بالكاميرا الخلفية
-    let mediaRecorder = null;
-    let recordedChunks = [];
-    let videoTrack = null;
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
 
-    const video = document.getElementById("camera");
-    const zoomRange = document.getElementById("zoomRange");
-    const zoomVal = document.getElementById("zoomVal");
-    const recStartBtn = document.getElementById("recStartBtn");
-    const recStopBtn = document.getElementById("recStopBtn");
-    const previewSection = document.getElementById("previewSection");
+    let isGameRunning = false;
+    let gameOver = false;
+    let score = 0;
+    let highScore = localStorage.getItem("dino_highscore") || 0;
+    let gameSpeed = 5;
+    let frameCount = 0;
 
-    // تشغيل الكاميرا عند فتح الصفحة
-    async function initCamera() {
-      if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
-      }
-
-      try {
-        currentStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facingMode },
-          audio: true
-        });
-
-        video.srcObject = currentStream;
-        videoTrack = currentStream.getVideoTracks()[0];
-
-        // إعداد ميزة الزوم إذا كانت مدعومة في الجهاز
-        setupZoom();
-
-      } catch (error) {
-        alert("تعذر الوصول إلى الكاميرا/المايكروفون. يرجى إعطاء الأذونات المطلوبة.");
-        console.error(error);
-      }
-    }
-
-    // التبديل بين الكاميرا الأمامية والخلفية
-    function switchCamera() {
-      facingMode = (facingMode === "environment") ? "user" : "environment";
-      initCamera();
-    }
-
-    // إعداد الزوم
-    function setupZoom() {
-      if (!videoTrack) return;
-      const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
-
-      if (capabilities.zoom) {
-        zoomRange.min = capabilities.zoom.min;
-        zoomRange.max = capabilities.zoom.max;
-        zoomRange.step = capabilities.zoom.step || 0.1;
-        zoomRange.value = videoTrack.getSettings().zoom || 1;
-        zoomVal.innerText = `${parseFloat(zoomRange.value).toFixed(1)}x`;
-        zoomRange.disabled = false;
-
-        zoomRange.oninput = async () => {
-          zoomVal.innerText = `${parseFloat(zoomRange.value).toFixed(1)}x`;
-          await videoTrack.applyConstraints({
-            advanced: [{ zoom: zoomRange.value }]
-          });
-        };
-      } else {
-        zoomRange.disabled = true;
-        zoomVal.innerText = "غير مدعوم";
-      }
-    }
-
-    // التقاط صورة
-    function takePhoto() {
-      const canvas = document.getElementById("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const imageUrl = canvas.toDataURL("image/png");
-
-      // عرض الصورة الملتقطة مع زر تحميلها
-      previewSection.innerHTML = `
-        <h4>الصورة الملتقطة:</h4>
-        <img src="${imageUrl}" alt="الصورة الملتقطة">
-        <a href="${imageUrl}" download="photo.png" style="color:#28a745; text-decoration:none; font-weight:bold;">📥 تحميل الصورة</a>
-      `;
-    }
-
-    // بدء تسجيل الفيديو
-    function startRecording() {
-      recordedChunks = [];
-      try {
-        mediaRecorder = new MediaRecorder(currentStream);
-      } catch (e) {
-        alert("التسجيل غير مدعوم في هذا المتصفح.");
-        return;
-      }
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          recordedChunks.push(event.data);
+    // الديناصور
+    const dino = {
+      x: 50,
+      y: 150,
+      width: 24,
+      height: 26,
+      dy: 0,
+      gravity: 0.6,
+      jumpForce: -10,
+      isGrounded: true,
+      legFrame: 0,
+      draw() {
+        ctx.fillStyle = "#535353";
+        // جسم الديناصور
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        // الرأس
+        ctx.fillRect(this.x + 10, this.y - 10, 18, 12);
+        // العين
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(this.x + 22, this.y - 8, 3, 3);
+        
+        // الأرجل (تتحرك أثناء الركض)
+        ctx.fillStyle = "#535353";
+        if (this.isGrounded && isGameRunning) {
+          if (Math.floor(frameCount / 6) % 2 === 0) {
+            ctx.fillRect(this.x + 4, this.y + this.height, 4, 6);
+            ctx.fillRect(this.x + 16, this.y + this.height, 4, 2);
+          } else {
+            ctx.fillRect(this.x + 4, this.y + this.height, 4, 2);
+            ctx.fillRect(this.x + 16, this.y + this.height, 4, 6);
+          }
+        } else {
+          ctx.fillRect(this.x + 4, this.y + this.height, 4, 6);
+          ctx.fillRect(this.x + 16, this.y + this.height, 4, 6);
         }
-      };
+      },
+      jump() {
+        if (this.isGrounded) {
+          this.dy = this.jumpForce;
+          this.isGrounded = false;
+        }
+      },
+      update() {
+        this.dy += this.gravity;
+        this.y += this.dy;
 
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunks, { type: "video/mp4" });
-        const videoUrl = URL.createObjectURL(blob);
+        // الأرضية
+        if (this.y + this.height >= 170) {
+          this.y = 170 - this.height;
+          this.dy = 0;
+          this.isGrounded = true;
+        }
+      }
+    };
 
-        // عرض الفيديو المسجل مع زر تحميله
-        previewSection.innerHTML = `
-          <h4>الفيديو المسجل:</h4>
-          <video class="media-preview" src="${videoUrl}" controls></video>
-          <a href="${videoUrl}" download="video.mp4" style="color:#28a745; text-decoration:none; font-weight:bold;">📥 تحميل الفيديو</a>
-        `;
-      };
+    // العقبات (الصبار)
+    let obstacles = [];
 
-      mediaRecorder.start();
-      recStartBtn.disabled = true;
-      recStopBtn.disabled = false;
-      recStartBtn.innerText = "⏳ جاري التسجيل...";
+    function spawnObstacle() {
+      const height = 20 + Math.random() * 15;
+      obstacles.push({
+        x: canvas.width,
+        y: 170 - height,
+        width: 12 + Math.random() * 8,
+        height: height
+      });
     }
 
-    // إيقاف تسجيل الفيديو
-    function stopRecording() {
-      if (mediaRecorder) {
-        mediaRecorder.stop();
-        recStartBtn.disabled = false;
-        recStopBtn.disabled = true;
-        recStartBtn.innerText = "🔴 بدء التسجيل";
+    // رسم الأرضية
+    function drawGround() {
+      ctx.strokeStyle = "#535353";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 170);
+      ctx.lineTo(canvas.width, 170);
+      ctx.stroke();
+    }
+
+    // القفز باللمس أو لوحة المفاتيح
+    function handleInput() {
+      if (!isGameRunning && !gameOver) {
+        isGameRunning = true;
+        gameLoop();
+      } else if (gameOver) {
+        resetGame();
+      } else {
+        dino.jump();
       }
     }
 
-    // تشغيل الكاميرا تلقائياً عند التحميل
-    window.onload = initCamera;
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space" || e.code === "ArrowUp") handleInput();
+    });
+
+    window.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      handleInput();
+    }, { passive: false });
+
+    function resetGame() {
+      obstacles = [];
+      score = 0;
+      gameSpeed = 5;
+      gameOver = false;
+      isGameRunning = true;
+      dino.y = 150;
+      dino.dy = 0;
+      gameLoop();
+    }
+
+    function gameLoop() {
+      if (gameOver) return;
+
+      frameCount++;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      drawGround();
+
+      // الديناصور
+      dino.update();
+      dino.draw();
+
+      // توليد العقبات
+      if (frameCount % Math.floor(1000 / (gameSpeed * 10)) === 0) {
+        if (Math.random() > 0.3) spawnObstacle();
+      }
+
+      // تحريك الصبار ورسمه
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        let obs = obstacles[i];
+        obs.x -= gameSpeed;
+
+        ctx.fillStyle = "#535353";
+        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+
+        // فحص التصادم
+        if (
+          dino.x < obs.x + obs.width &&
+          dino.x + dino.width > obs.x &&
+          dino.y < obs.y + obs.height &&
+          dino.y + dino.height > obs.y
+        ) {
+          gameOver = true;
+          isGameRunning = false;
+          if (score > highScore) {
+            highScore = Math.floor(score);
+            localStorage.setItem("dino_highscore", highScore);
+          }
+        }
+
+        // مسح العقبات التي خرجت من الشاشة
+        if (obs.x + obs.width < 0) {
+          obstacles.splice(i, 1);
+        }
+      }
+
+      // زيادة النتيجة والسرعة
+      if (isGameRunning) {
+        score += 0.15;
+        gameSpeed += 0.0005;
+      }
+
+      // كتابة النقاط
+      ctx.fillStyle = "#535353";
+      ctx.font = "14px 'Courier New', Courier, monospace";
+      ctx.fillText(`HI ${String(Math.floor(highScore)).padStart(5, '0')}  ${String(Math.floor(score)).padStart(5, '0')}`, canvas.width - 160, 25);
+
+      // شاشة النهاية
+      if (gameOver) {
+        ctx.fillStyle = "#535353";
+        ctx.font = "18px 'Courier New', Courier, monospace";
+        ctx.fillText("G A M E   O V E R", canvas.width / 2 - 90, 90);
+        ctx.font = "12px 'Courier New', Courier, monospace";
+        ctx.fillText("اضغط لإعادة اللعب 🔄", canvas.width / 2 - 65, 115);
+      } else {
+        requestAnimationFrame(gameLoop);
+      }
+    }
+
+    // الرسم المبدئي قبل البدء
+    drawGround();
+    dino.draw();
+    ctx.fillStyle = "#535353";
+    ctx.font = "14px 'Courier New', Courier, monospace";
+    ctx.fillText("اضغط للبدء ▶", canvas.width / 2 - 45, 90);
   </script>
 
 </body>
 </html>
-
