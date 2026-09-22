@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>لعبة الديناصور - Chrome Dino</title>
+  <title>لعبة الديناصور الكلاسيكية - Chrome Dino</title>
   <style>
     * {
       box-sizing: border-box;
@@ -27,11 +27,8 @@
       width: 100%;
       max-width: 600px;
       height: 200px;
-      background-color: #fff;
-      border-bottom: 2px solid #535353;
+      background-color: #f7f7f7;
       overflow: hidden;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-      border-radius: 8px;
     }
     canvas {
       display: block;
@@ -61,93 +58,231 @@
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
+    // محاكاة الأصوات برمجياً (Web Audio API)
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new AudioContext();
+      }
+    }
+
+    function playSound(type) {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'jump') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1);
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.1);
+        } else if (type === 'score') {
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(500, audioCtx.currentTime);
+          osc.frequency.setValueAtTime(700, audioCtx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.2);
+        } else if (type === 'die') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+          osc.frequency.linearRampToValueAtTime(40, audioCtx.currentTime + 0.25);
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.25);
+        }
+      } catch (e) {}
+    }
+
     let isGameRunning = false;
     let gameOver = false;
     let score = 0;
     let highScore = localStorage.getItem("dino_highscore") || 0;
-    let gameSpeed = 5;
+    let lastScoreSound = 0;
+    let gameSpeed = 3.8; // سرعة سهلة ومناسبة
     let frameCount = 0;
 
-    // الديناصور
+    // الديناصور الأصلي
     const dino = {
-      x: 50,
-      y: 150,
-      width: 24,
-      height: 26,
+      x: 40,
+      y: 130,
+      width: 44,
+      height: 47,
       dy: 0,
-      gravity: 0.6,
-      jumpForce: -10,
+      gravity: 0.5,
+      jumpForce: -9.5,
       isGrounded: true,
       legFrame: 0,
+
       draw() {
         ctx.fillStyle = "#535353";
-        // جسم الديناصور
-        ctx.fillRect(this.x, this.y, this.width, this.height);
-        // الرأس
-        ctx.fillRect(this.x + 10, this.y - 10, 18, 12);
-        // العين
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(this.x + 22, this.y - 8, 3, 3);
-        
-        // الأرجل (تتحرك أثناء الركض)
+        const x = this.x;
+        const y = this.y;
+
+        // رسم الديناصور بالبيكسل (الشكل المطبق بالكامل للعبة الأصلية)
+        // الرأس والرؤية
+        ctx.fillRect(x + 22, y, 22, 16);
+        ctx.fillRect(x + 18, y + 4, 4, 12);
+        ctx.fillRect(x + 40, y + 8, 4, 8);
+        ctx.fillStyle = "#f7f7f7";
+        ctx.fillRect(x + 26, y + 2, 4, 4); // العين
+
         ctx.fillStyle = "#535353";
+        // الفم
+        ctx.fillRect(x + 30, y + 10, 14, 2);
+
+        // الجسم واليد
+        ctx.fillRect(x + 10, y + 16, 26, 18);
+        ctx.fillRect(x + 32, y + 20, 8, 4); // اليد
+        ctx.fillRect(x + 6, y + 18, 4, 12);  // الذيل
+        ctx.fillRect(x + 2, y + 20, 4, 8);
+
+        // الأرجل مع حركة الركض
         if (this.isGrounded && isGameRunning) {
-          if (Math.floor(frameCount / 6) % 2 === 0) {
-            ctx.fillRect(this.x + 4, this.y + this.height, 4, 6);
-            ctx.fillRect(this.x + 16, this.y + this.height, 4, 2);
+          if (Math.floor(frameCount / 7) % 2 === 0) {
+            // رجل 1
+            ctx.fillRect(x + 14, y + 34, 4, 10);
+            ctx.fillRect(x + 14, y + 44, 8, 3);
+            // رجل 2 مرتفعة
+            ctx.fillRect(x + 26, y + 34, 4, 6);
           } else {
-            ctx.fillRect(this.x + 4, this.y + this.height, 4, 2);
-            ctx.fillRect(this.x + 16, this.y + this.height, 4, 6);
+            // رجل 1 مرتفعة
+            ctx.fillRect(x + 14, y + 34, 4, 6);
+            // رجل 2
+            ctx.fillRect(x + 26, y + 34, 4, 10);
+            ctx.fillRect(x + 26, y + 44, 8, 3);
           }
         } else {
-          ctx.fillRect(this.x + 4, this.y + this.height, 4, 6);
-          ctx.fillRect(this.x + 16, this.y + this.height, 4, 6);
+          // في الهواء عند القفز
+          ctx.fillRect(x + 14, y + 34, 4, 8);
+          ctx.fillRect(x + 14, y + 42, 6, 3);
+          ctx.fillRect(x + 26, y + 34, 4, 8);
+          ctx.fillRect(x + 26, y + 42, 6, 3);
         }
       },
+
       jump() {
         if (this.isGrounded) {
           this.dy = this.jumpForce;
           this.isGrounded = false;
+          playSound('jump');
         }
       },
+
       update() {
         this.dy += this.gravity;
         this.y += this.dy;
 
-        // الأرضية
-        if (this.y + this.height >= 170) {
-          this.y = 170 - this.height;
+        if (this.y + this.height >= 177) {
+          this.y = 177 - this.height;
           this.dy = 0;
           this.isGrounded = true;
         }
       }
     };
 
-    // العقبات (الصبار)
+    // الصبار الأصلي
     let obstacles = [];
+    let minDistanceBetweenObstacles = 320; // مسافة أمان واسعة لجعل اللعبة سهلة
 
     function spawnObstacle() {
-      const height = 20 + Math.random() * 15;
+      const type = Math.random() > 0.4 ? 'small' : 'large';
+      const isGroup = Math.random() > 0.7;
+
+      let width = type === 'small' ? 17 : 24;
+      let height = type === 'small' ? 35 : 46;
+
+      if (isGroup) width *= 2;
+
       obstacles.push({
-        x: canvas.width,
-        y: 170 - height,
-        width: 12 + Math.random() * 8,
-        height: height
+        x: canvas.width + 20,
+        y: 177 - height,
+        width: width,
+        height: height,
+        type: type,
+        isGroup: isGroup
       });
     }
 
-    // رسم الأرضية
-    function drawGround() {
-      ctx.strokeStyle = "#535353";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(0, 170);
-      ctx.lineTo(canvas.width, 170);
-      ctx.stroke();
+    function drawCactus(obs) {
+      ctx.fillStyle = "#535353";
+      const x = obs.x;
+      const y = obs.y;
+      const h = obs.height;
+
+      // ساق الصبار الرئيسي
+      ctx.fillRect(x + obs.width * 0.35, y, obs.width * 0.3, h);
+
+      // الأغصان الجانبية
+      ctx.fillRect(x, y + h * 0.3, obs.width * 0.35, 4);
+      ctx.fillRect(x, y + h * 0.15, 4, h * 0.2);
+
+      ctx.fillRect(x + obs.width * 0.65, y + h * 0.4, obs.width * 0.35, 4);
+      ctx.fillRect(x + obs.width - 4, y + h * 0.25, 4, h * 0.2);
     }
 
-    // القفز باللمس أو لوحة المفاتيح
+    // الغيوم والحصى (الأرضية)
+    let clouds = [];
+    let gravels = [];
+
+    function initEnvironment() {
+      clouds = [
+        { x: 100, y: 30 },
+        { x: 300, y: 50 },
+        { x: 500, y: 25 }
+      ];
+
+      gravels = [];
+      for (let i = 0; i < 20; i++) {
+        gravels.push({
+          x: Math.random() * canvas.width,
+          y: 178 + Math.random() * 18,
+          size: Math.random() > 0.5 ? 2 : 1
+        });
+      }
+    }
+
+    function updateEnvironment() {
+      // الغيوم
+      clouds.forEach(cloud => {
+        cloud.x -= gameSpeed * 0.2;
+        if (cloud.x < -50) cloud.x = canvas.width + Math.random() * 50;
+
+        ctx.fillStyle = "#d3d3d3";
+        ctx.fillRect(cloud.x, cloud.y, 34, 10);
+        ctx.fillRect(cloud.x + 8, cloud.y - 6, 18, 6);
+      });
+
+      // خط الأرضية
+      ctx.strokeStyle = "#535353";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 177);
+      ctx.lineTo(canvas.width, 177);
+      ctx.stroke();
+
+      // الحصى والرمال
+      ctx.fillStyle = "#777777";
+      gravels.forEach(g => {
+        g.x -= gameSpeed;
+        if (g.x < 0) g.x = canvas.width + Math.random() * 20;
+        ctx.fillRect(g.x, g.y, g.size, 1);
+      });
+    }
+
+    // التحكم والقفز
     function handleInput() {
+      initAudio();
       if (!isGameRunning && !gameOver) {
         isGameRunning = true;
         gameLoop();
@@ -170,11 +305,13 @@
     function resetGame() {
       obstacles = [];
       score = 0;
-      gameSpeed = 5;
+      lastScoreSound = 0;
+      gameSpeed = 3.8;
       gameOver = false;
       isGameRunning = true;
-      dino.y = 150;
+      dino.y = 130;
       dino.dy = 0;
+      initEnvironment();
       gameLoop();
     }
 
@@ -184,71 +321,88 @@
       frameCount++;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      drawGround();
+      updateEnvironment();
 
       // الديناصور
       dino.update();
       dino.draw();
 
-      // توليد العقبات
-      if (frameCount % Math.floor(1000 / (gameSpeed * 10)) === 0) {
-        if (Math.random() > 0.3) spawnObstacle();
+      // توليد الصبار بمسافات متباعدة وسهلة
+      let lastObstacleX = obstacles.length > 0 ? obstacles[obstacles.length - 1].x : 0;
+      if (canvas.width - lastObstacleX > minDistanceBetweenObstacles) {
+        if (Math.random() < 0.02) {
+          spawnObstacle();
+        }
       }
 
-      // تحريك الصبار ورسمه
+      // تحريك ورسم الصبار
       for (let i = obstacles.length - 1; i >= 0; i--) {
         let obs = obstacles[i];
         obs.x -= gameSpeed;
 
-        ctx.fillStyle = "#535353";
-        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+        drawCactus(obs);
 
-        // فحص التصادم
+        // فحص التصادم الدقيق
         if (
-          dino.x < obs.x + obs.width &&
-          dino.x + dino.width > obs.x &&
-          dino.y < obs.y + obs.height &&
+          dino.x + 8 < obs.x + obs.width &&
+          dino.x + dino.width - 8 > obs.x &&
+          dino.y + 4 < obs.y + obs.height &&
           dino.y + dino.height > obs.y
         ) {
           gameOver = true;
           isGameRunning = false;
+          playSound('die');
+
           if (score > highScore) {
             highScore = Math.floor(score);
             localStorage.setItem("dino_highscore", highScore);
           }
         }
 
-        // مسح العقبات التي خرجت من الشاشة
         if (obs.x + obs.width < 0) {
           obstacles.splice(i, 1);
         }
       }
 
-      // زيادة النتيجة والسرعة
+      // النتيجة والتسارع التدريجي البطيء جداً
       if (isGameRunning) {
-        score += 0.15;
-        gameSpeed += 0.0005;
+        score += 0.12;
+        gameSpeed += 0.0002;
+
+        // صوت كل 100 نقطة
+        let currentIntScore = Math.floor(score);
+        if (currentIntScore > 0 && currentIntScore % 100 === 0 && currentIntScore !== lastScoreSound) {
+          playSound('score');
+          lastScoreSound = currentIntScore;
+        }
       }
 
-      // كتابة النقاط
+      // كتابة النقاط كاللعبة الأصلية
       ctx.fillStyle = "#535353";
       ctx.font = "14px 'Courier New', Courier, monospace";
-      ctx.fillText(`HI ${String(Math.floor(highScore)).padStart(5, '0')}  ${String(Math.floor(score)).padStart(5, '0')}`, canvas.width - 160, 25);
+      ctx.fillText(`HI ${String(Math.floor(highScore)).padStart(5, '0')}  ${String(Math.floor(score)).padStart(5, '0')}`, canvas.width - 170, 25);
 
-      // شاشة النهاية
+      // شاشة النهاية الأصلية
       if (gameOver) {
         ctx.fillStyle = "#535353";
-        ctx.font = "18px 'Courier New', Courier, monospace";
-        ctx.fillText("G A M E   O V E R", canvas.width / 2 - 90, 90);
-        ctx.font = "12px 'Courier New', Courier, monospace";
-        ctx.fillText("اضغط لإعادة اللعب 🔄", canvas.width / 2 - 65, 115);
+        ctx.font = "16px 'Courier New', Courier, monospace";
+        ctx.fillText("G A M E   O V E R", canvas.width / 2 - 80, 85);
+        
+        // رسم زر إعطاء المحاولة (Reset Icon)
+        const rx = canvas.width / 2 - 12;
+        const ry = 105;
+        ctx.beginPath();
+        ctx.arc(rx + 12, ry + 12, 10, 0, Math.PI * 1.5);
+        ctx.strokeStyle = "#535353";
+        ctx.lineWidth = 3;
+        ctx.stroke();
       } else {
         requestAnimationFrame(gameLoop);
       }
     }
 
-    // الرسم المبدئي قبل البدء
-    drawGround();
+    // التهيئة البدائية
+    initEnvironment();
     dino.draw();
     ctx.fillStyle = "#535353";
     ctx.font = "14px 'Courier New', Courier, monospace";
