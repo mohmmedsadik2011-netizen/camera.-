@@ -3,102 +3,280 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>اختبار الكاميرا</title>
+  <title>كاميرا احترافية</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
       margin: 0;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      background: #111;
+      justify-content: flex-start;
+      background: #121212;
       color: white;
       font-family: Arial, sans-serif;
-      gap: 15px;
-      padding: 20px;
-      box-sizing: border-box;
+      padding: 15px;
+      gap: 12px;
     }
 
-    h2 {
-      margin-bottom: 10px;
+    h3 {
+      margin: 5px 0;
+    }
+
+    .video-container {
+      position: relative;
+      width: 100%;
+      max-width: 450px;
+      background: #000;
+      border-radius: 15px;
+      overflow: hidden;
+      border: 2px solid #333;
     }
 
     video {
       width: 100%;
-      max-width: 500px;
-      border-radius: 15px;
-      background: #000;
-      border: 2px solid #333;
+      display: block;
     }
 
-    .btn-container {
+    .controls-panel {
+      width: 100%;
+      max-width: 450px;
       display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #1e1e1e;
+      padding: 15px;
+      border-radius: 12px;
+    }
+
+    .zoom-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+    }
+
+    .zoom-container input {
+      flex: 1;
+    }
+
+    .buttons-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
 
     button {
-      padding: 12px 20px;
+      padding: 12px;
       border: 0;
-      border-radius: 10px;
-      font-size: 16px;
-      cursor: pointer;
+      border-radius: 8px;
+      font-size: 15px;
       font-weight: bold;
+      cursor: pointer;
+      color: white;
       transition: 0.2s;
     }
 
-    .start-btn {
-      background-color: #28a745;
-      color: white;
+    .btn-switch { background-color: #6c757d; }
+    .btn-photo { background-color: #28a745; }
+    .btn-rec-start { background-color: #dc3545; }
+    .btn-rec-stop { background-color: #ffc107; color: #000; }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
-    .stop-btn {
-      background-color: #dc3545;
-      color: white;
+    /* قسم عرض المعاينة للصورة/الفيديو */
+    .preview-section {
+      width: 100%;
+      max-width: 450px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
     }
 
-    button:active {
-      opacity: 0.8;
+    canvas { display: none; }
+
+    img, video.media-preview {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid #444;
     }
   </style>
 </head>
 <body>
 
-  <h2>تشغيل الكاميرا 📷</h2>
+  <h3>تطبيق الكاميرا المتكامل 📷</h3>
 
-  <video id="camera" autoplay playsinline></video>
-
-  <div class="btn-container">
-    <button class="start-btn" onclick="startCamera()">تشغيل الكاميرا</button>
-    <button class="stop-btn" onclick="stopCamera()">إيقاف الكاميرا</button>
+  <!-- شاشة الكاميرا المباشرة -->
+  <div class="video-container">
+    <video id="camera" autoplay playsinline></video>
   </div>
+
+  <!-- لوحة التحكم -->
+  <div class="controls-panel">
+    <!-- شريط التحكم بالزوم -->
+    <div class="zoom-container">
+      <span>🔍 الزوم:</span>
+      <input type="range" id="zoomRange" min="1" max="1" step="0.1" value="1" disabled>
+      <span id="zoomVal">1x</span>
+    </div>
+
+    <!-- أزرار التحكم -->
+    <div class="buttons-grid">
+      <button class="btn-switch" onclick="switchCamera()">🔄 تبديل الكاميرا</button>
+      <button class="btn-photo" onclick="takePhoto()">📸 التقاط صورة</button>
+      <button id="recStartBtn" class="btn-rec-start" onclick="startRecording()">🔴 بدء التسجيل</button>
+      <button id="recStopBtn" class="btn-rec-stop" onclick="stopRecording()" disabled>⏹️ إيقاف وتسجيل</button>
+    </div>
+  </div>
+
+  <!-- قسم المعاينة للتسجيلات والصور -->
+  <div class="preview-section" id="previewSection"></div>
+
+  <!-- عنصر مخفي لالتقاط الصور -->
+  <canvas id="canvas"></canvas>
 
   <script>
     let currentStream = null;
+    let facingMode = "environment"; // البدء بالكاميرا الخلفية
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let videoTrack = null;
 
-    async function startCamera() {
+    const video = document.getElementById("camera");
+    const zoomRange = document.getElementById("zoomRange");
+    const zoomVal = document.getElementById("zoomVal");
+    const recStartBtn = document.getElementById("recStartBtn");
+    const recStopBtn = document.getElementById("recStopBtn");
+    const previewSection = document.getElementById("previewSection");
+
+    // تشغيل الكاميرا عند فتح الصفحة
+    async function initCamera() {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+
       try {
-        // طلب إذن الكاميرا الخلفية إن وجدت، أو الأمامية
         currentStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-          audio: false
+          video: { facingMode: facingMode },
+          audio: true
         });
-        
-        const videoElement = document.getElementById("camera");
-        videoElement.srcObject = currentStream;
+
+        video.srcObject = currentStream;
+        videoTrack = currentStream.getVideoTracks()[0];
+
+        // إعداد ميزة الزوم إذا كانت مدعومة في الجهاز
+        setupZoom();
+
       } catch (error) {
-        alert("لم يتم السماح باستخدام الكاميرا أو أنها غير متاحة.");
+        alert("تعذر الوصول إلى الكاميرا/المايكروفون. يرجى إعطاء الأذونات المطلوبة.");
         console.error(error);
       }
     }
 
-    function stopCamera() {
-      if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
-        document.getElementById("camera").srcObject = null;
+    // التبديل بين الكاميرا الأمامية والخلفية
+    function switchCamera() {
+      facingMode = (facingMode === "environment") ? "user" : "environment";
+      initCamera();
+    }
+
+    // إعداد الزوم
+    function setupZoom() {
+      if (!videoTrack) return;
+      const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+
+      if (capabilities.zoom) {
+        zoomRange.min = capabilities.zoom.min;
+        zoomRange.max = capabilities.zoom.max;
+        zoomRange.step = capabilities.zoom.step || 0.1;
+        zoomRange.value = videoTrack.getSettings().zoom || 1;
+        zoomVal.innerText = `${parseFloat(zoomRange.value).toFixed(1)}x`;
+        zoomRange.disabled = false;
+
+        zoomRange.oninput = async () => {
+          zoomVal.innerText = `${parseFloat(zoomRange.value).toFixed(1)}x`;
+          await videoTrack.applyConstraints({
+            advanced: [{ zoom: zoomRange.value }]
+          });
+        };
+      } else {
+        zoomRange.disabled = true;
+        zoomVal.innerText = "غير مدعوم";
       }
     }
+
+    // التقاط صورة
+    function takePhoto() {
+      const canvas = document.getElementById("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageUrl = canvas.toDataURL("image/png");
+
+      // عرض الصورة الملتقطة مع زر تحميلها
+      previewSection.innerHTML = `
+        <h4>الصورة الملتقطة:</h4>
+        <img src="${imageUrl}" alt="الصورة الملتقطة">
+        <a href="${imageUrl}" download="photo.png" style="color:#28a745; text-decoration:none; font-weight:bold;">📥 تحميل الصورة</a>
+      `;
+    }
+
+    // بدء تسجيل الفيديو
+    function startRecording() {
+      recordedChunks = [];
+      try {
+        mediaRecorder = new MediaRecorder(currentStream);
+      } catch (e) {
+        alert("التسجيل غير مدعوم في هذا المتصفح.");
+        return;
+      }
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: "video/mp4" });
+        const videoUrl = URL.createObjectURL(blob);
+
+        // عرض الفيديو المسجل مع زر تحميله
+        previewSection.innerHTML = `
+          <h4>الفيديو المسجل:</h4>
+          <video class="media-preview" src="${videoUrl}" controls></video>
+          <a href="${videoUrl}" download="video.mp4" style="color:#28a745; text-decoration:none; font-weight:bold;">📥 تحميل الفيديو</a>
+        `;
+      };
+
+      mediaRecorder.start();
+      recStartBtn.disabled = true;
+      recStopBtn.disabled = false;
+      recStartBtn.innerText = "⏳ جاري التسجيل...";
+    }
+
+    // إيقاف تسجيل الفيديو
+    function stopRecording() {
+      if (mediaRecorder) {
+        mediaRecorder.stop();
+        recStartBtn.disabled = false;
+        recStopBtn.disabled = true;
+        recStartBtn.innerText = "🔴 بدء التسجيل";
+      }
+    }
+
+    // تشغيل الكاميرا تلقائياً عند التحميل
+    window.onload = initCamera;
   </script>
 
 </body>
 </html>
+
